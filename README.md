@@ -25,7 +25,7 @@ Godot 4.6（GL Compatibility）製。CRTシェーダーは [Gemidius](https://gi
 
 ## ダウンロード
 
-リポジトリ直下の `TurnTV.exe`（Windows x86_64、pck埋め込み単体実行ファイル）をダウンロードして実行できます。
+[Releases](https://github.com/TSUISHI/TurnTV/releases) ページから `TurnTV.exe`（Windows x86_64、pck埋め込み単体実行ファイル）をダウンロードして実行できます。
 
 ダウンロード後、改ざんされていないことを以下のSHA256ハッシュで確認できます：
 
