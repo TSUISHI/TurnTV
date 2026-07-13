@@ -2,7 +2,7 @@
 
 デスクトップ画面の任意の矩形領域をマウスで指定し、その領域を「NTSCコンポジット接続のブラウン管テレビ」風の映像としてリアルタイム表示するツールです。
 
-Godot 4.6（GL Compatibility）製。CRTシェーダーは [Gemidius](https://github.com/TSUISHI) プロジェクトの2段構成（NTSC信号経路 + CRT表示）を移植したものです。
+Godot 4.6（GL Compatibility）製。CRTシェーダーは別プロジェクト（シューティングゲーム）の2段構成（NTSC信号経路 + CRT表示）を移植したものです。
 
 ## 使い方
 
