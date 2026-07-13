@@ -522,6 +522,12 @@ func _quit_app() -> void:
     get_tree().quit()
 
 
+# Alt+F4等のOS経由の終了要求でも設定を保存します（保存漏れ対策）。
+func _notification(what: int) -> void:
+    if what == NOTIFICATION_WM_CLOSE_REQUEST and mode == Mode.TV:
+        _save_settings()
+
+
 # ═══ 毎フレーム処理 ═══════════════════════════════════════════════════════════
 
 func _process(delta: float) -> void:
