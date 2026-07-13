@@ -446,9 +446,13 @@ func enter_select_mode() -> void:
     frozen_texture = ImageTexture.create_from_image(img)
     frozen_size = img.get_size()
     select_screen_origin = DisplayServer.screen_get_position(capture_screen)
+    # 【重要】ボーダーレスウィンドウをスクリーンサイズぴったりへ手動リサイズすると、
+    # Windows側で排他フルスクリーン（MODE_EXCLUSIVE_FULLSCREEN）へ自動昇格してしまい、
+    # 以後のウィンドウ化・縮小が無視されて全画面のまま残ります（2026-07-13に実測）。
+    # そのため明示的に MODE_FULLSCREEN を使い、正規の手順で行き来させます。
     win.mode = Window.MODE_WINDOWED
-    win.position = select_screen_origin
-    win.size = DisplayServer.screen_get_size(capture_screen)
+    win.current_screen = capture_screen
+    win.mode = Window.MODE_FULLSCREEN
     select_ready = true
     queue_redraw()
     # 診断ログ: ウィンドウが要求どおりの位置・サイズになったかを1フレーム後に出力します。
@@ -457,6 +461,19 @@ func enter_select_mode() -> void:
     print("TurnTV SELECT geom: screen=", capture_screen, " origin=", select_screen_origin,
             " screen_size=", DisplayServer.screen_get_size(capture_screen),
             " win_pos=", win.position, " win_size=", win.size, " frozen=", frozen_size)
+    # デバッグ用: TURNTV_AUTOSELECT="x,y,w,h"（ウィンドウ座標）で起動すると、その矩形を
+    # 自動確定して選択→TV遷移を無人テストできます（通常起動では何もしません）。
+    var auto_sel: String = OS.get_environment("TURNTV_AUTOSELECT")
+    if auto_sel != "":
+        var parts: PackedStringArray = auto_sel.split(",")
+        if parts.size() == 4:
+            var auto_rect: Rect2 = Rect2(float(parts[0]), float(parts[1]), float(parts[2]), float(parts[3]))
+            capture_rect = _selection_to_screen_rect(auto_rect)
+            print("TurnTV AUTOSELECT -> capture_rect=", capture_rect)
+            enter_tv_mode(true)
+            await get_tree().create_timer(1.0).timeout
+            print("TurnTV after TV transition: win_mode=", win.mode,
+                    " win_pos=", win.position, " win_size=", win.size)
 
 
 # TV表示モードへ入ります。from_selection=trueなら選択直後で、ウィンドウサイズを
@@ -464,9 +481,20 @@ func enter_select_mode() -> void:
 func enter_tv_mode(from_selection: bool) -> void:
     mode = Mode.TV
     var win: Window = get_window()
-    win.mode = Window.MODE_WINDOWED
+    # 選択用の静止画は解放します（巨大テクスチャの保持と描き残りの防止）。
+    frozen_texture = null
+    tv_display.visible = true
+    close_button.visible = true
+    capture_frame_accum = capture_interval  # 次フレームで即キャプチャさせます。
     if from_selection:
         zoom = 1.0
+    queue_redraw()
+    # 【重要】画面全体に広げた選択ウィンドウは、Windows側で最大化/フルスクリーン扱いに
+    # なることがあり、その状態でのサイズ変更は無視されて全画面のまま残ります。
+    # 先にウィンドウ化へ戻し、1フレーム待って反映させてからサイズ・位置を適用します。
+    win.mode = Window.MODE_WINDOWED
+    await get_tree().process_frame
+    if from_selection:
         var desired: Vector2i = Vector2i((Vector2(capture_rect.size) / RECT_WINDOW_RATIO).ceil()) + Vector2i(2, 2)
         var screen_limit: Vector2i = Vector2i(Vector2(DisplayServer.screen_get_size(capture_screen)) * 0.9)
         desired = desired.clamp(MIN_WINDOW_SIZE, screen_limit)
@@ -480,9 +508,10 @@ func enter_tv_mode(from_selection: bool) -> void:
         tv_window_pos = win.position
         tv_window_size = win.size
         has_tv_window_state = true
-    tv_display.visible = true
-    close_button.visible = true
-    capture_frame_accum = capture_interval  # 次フレームで即キャプチャさせます。
+    elif has_tv_window_state:
+        # 選択キャンセル（ESC）等での復帰時も、全画面状態を確実に解除して元の位置へ戻します。
+        win.size = tv_window_size
+        win.position = tv_window_pos
     _update_tv_layout()
     queue_redraw()
 
@@ -624,9 +653,7 @@ func _handle_select_input(event: InputEvent) -> void:
         queue_redraw()
     elif event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
         if capture_rect.size.x >= MIN_SELECT_SIZE and capture_rect.size.y >= MIN_SELECT_SIZE:
-            enter_tv_mode(false)
-            get_window().position = tv_window_pos
-            get_window().size = tv_window_size
+            enter_tv_mode(false)  # ウィンドウ位置・サイズの復元は enter_tv_mode 内で行います。
         else:
             _quit_app()
 
