@@ -23,6 +23,18 @@ Godot 4.6（GL Compatibility）製。CRTシェーダーは [Gemidius](https://gi
 
 パラメータメニューでは、色にじみ・偽色・ゴースト・ノイズ・走査線・蛍光体マスク・画面カーブなど約35項目を調節できます。
 
+## ダウンロード
+
+リポジトリ直下の `TurnTV.exe`（Windows x86_64、pck埋め込み単体実行ファイル）をダウンロードして実行できます。
+
+ダウンロード後、改ざんされていないことを以下のSHA256ハッシュで確認できます：
+
+```
+SHA256: 55ED455DC69BA77C12B33ADE0A814794916C332C5336FCA55B74C395E9493109
+```
+
+確認コマンド（PowerShell）: `Get-FileHash TurnTV.exe -Algorithm SHA256`
+
 ## 動作環境
 
 - Windows（`DisplayServer.screen_get_image` による画面キャプチャを使用）
