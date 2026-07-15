@@ -51,15 +51,15 @@ Automatic quality adjustment based on GPU performance or frame rate is not curre
 
 ## Download
 
-Download `TurnTV.exe` from the [Releases](https://github.com/TSUISHI/TurnTV/releases) page. It is a standalone Windows x86_64 executable with the PCK embedded.
+The current release is **v1.0.1**. Download `TurnTV_v1.0.1.exe` from the [Releases](https://github.com/TSUISHI/TurnTV/releases) page. It is a standalone Windows x86_64 executable with the PCK embedded.
 
 Verify the downloaded file with this SHA-256 hash:
 
 ```
-SHA256: 55ED455DC69BA77C12B33ADE0A814794916C332C5336FCA55B74C395E9493109
+SHA256: 0BA89F0CDB4E17855182D456A1113EDCF2DBE987A16214A767CB7CCA220B66DE
 ```
 
-PowerShell verification command: `Get-FileHash TurnTV.exe -Algorithm SHA256`
+PowerShell verification command: `Get-FileHash TurnTV_v1.0.1.exe -Algorithm SHA256`
 
 ## Requirements
 
