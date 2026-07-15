@@ -7,7 +7,7 @@
 ## 1. 概要
 
 デスクトップ画面上の任意の矩形領域をマウスで指定し、その領域を「NTSCコンポジット接続のブラウン管テレビ」風の映像として別ウィンドウに表示するツールです。
-TVシェーダーは作成中のレトロゲーム（`BaseState.gd` 内の `CRT_SIGNAL_SHADER_CODE` / `CRT_DISPLAY_SHADER_CODE`、設計書 CRT_SHADER_DESIGN_20260711.md）から移植したものです。
+TVシェーダーは作成中のレトロゲーム（`BaseState.gd` 内の `CRT_SIGNAL_SHADER_CODE` / `CRT_DISPLAY_SHADER_CODE`）から移植したものです。
 
 ## 2. 動作モード
 
