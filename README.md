@@ -66,4 +66,4 @@ PowerShell verification command: `Get-FileHash TurnTV_v1.0.1.exe -Algorithm SHA2
 - Windows; desktop capture uses `DisplayServer.screen_get_image`
 - Godot 4.6 or later when running the project from source
 
-See [SPEC_TurnTV.md](SPEC_TurnTV.md) for the full specification, [SPEC_Turn_ja.md](SPEC_Turn_ja.md) for the Japanese version, and [CODEX_SPEC_TURNTV_CRT_UPGRADE_20260715.md](CODEX_SPEC_TURNTV_CRT_UPGRADE_20260715.md) for the upgrade design contract.
+See [SPEC_TurnTV.md](SPEC_TurnTV.md) for the full specification and [SPEC_Turn_ja.md](SPEC_Turn_ja.md) for the Japanese version.

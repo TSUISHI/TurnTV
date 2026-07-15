@@ -66,4 +66,4 @@ SHA256: 0BA89F0CDB4E17855182D456A1113EDCF2DBE987A16214A767CB7CCA220B66DE
 - Windows（`DisplayServer.screen_get_image` による画面キャプチャを使用）
 - Godot 4.6 以降（実行には Godot エディタ/ランタイムでプロジェクトを開いて実行）
 
-詳細仕様は [SPEC_Turn_ja.md](SPEC_Turn_ja.md)（[English](SPEC_TurnTV.md)）、今回の設計契約は [CODEX_SPEC_TURNTV_CRT_UPGRADE_20260715.md](CODEX_SPEC_TURNTV_CRT_UPGRADE_20260715.md) を参照してください。
+詳細仕様は [SPEC_Turn_ja.md](SPEC_Turn_ja.md)（[English](SPEC_TurnTV.md)）を参照してください。
