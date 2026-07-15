@@ -1,186 +1,192 @@
-# TurnTV 仕様書
+# TurnTV Specification
 
-作成日: 2026-07-13 / 対象エンジン: Godot 4.6.3 (GL Compatibility) / リポジトリ: https://github.com/TSUISHI/TurnTV
+English | [日本語](SPEC_Turn_ja.md)
 
-## 1. 概要
+Created: July 13, 2026 / Target engine: Godot 4.6.3 (GL Compatibility) / Repository: https://github.com/TSUISHI/TurnTV
 
-デスクトップ画面上の任意の矩形領域をマウスで指定し、その領域を「NTSCコンポジット接続のブラウン管テレビ」風の映像として別ウィンドウに表示するツールです。
-TVシェーダーは シューティングゲームプロジェクト（`BaseState.gd` 内の `CRT_SIGNAL_SHADER_CODE` / `CRT_DISPLAY_SHADER_CODE`、設計書 CRT_SHADER_DESIGN_20260711.md）から移植します。
+## 1. Overview
 
-## 2. 動作モード
+TurnTV lets the user select any rectangular area of the desktop and display it in a separate window as if it were shown on a CRT television connected through NTSC composite video.
 
-アプリは単一ウィンドウで、以下の2モードを切り替えます。
+The TV shaders were ported from a retro game currently in development (`CRT_SIGNAL_SHADER_CODE` and `CRT_DISPLAY_SHADER_CODE` in `BaseState.gd`, documented in `CRT_SHADER_DESIGN_20260711.md`).
 
-### 2.1 矩形選択モード（SELECT）
+## 2. Operating modes
 
-- 起動直後（保存済みの矩形が無い場合）と、TV画像を左クリックしたときに入ります。
-- 自ウィンドウを一旦最小化して約0.3秒待ち、`DisplayServer.screen_get_image()` でデスクトップ全体の静止スクリーンショットを取得します。
-- その後ウィンドウを画面全体に広げ、静止画の上に暗幕を重ねて表示します（一般的なスクリーンショットツールと同じ方式）。
-- 左ドラッグで矩形を指定します。選択中の矩形内は明るく、外は暗く表示し、矩形サイズ（px）を数字で表示します。
-- ドラッグ終了（ボタン離し）で矩形確定 → TV表示モードへ移行します。最小サイズは 8x8 px です。
-- ESC でキャンセルします（確定済みの矩形があればTVモードへ戻り、無ければ終了）。
-- 矩形座標はデスクトップ絶対座標（マルチモニタ対応）で保持します。
-- 座標変換は「静止画の実ピクセルサイズ⇔ウィンドウサイズ」の比率で補正します。タスクバーやDPIスケーリングでウィンドウがスクリーンサイズちょうどにならない環境でも、見えている静止画上の位置がそのままキャプチャ位置になります。
+The application uses one window and switches between two modes.
 
-### 2.2 TV表示モード（TV）
+### 2.1 Selection mode (SELECT)
 
-- ボーダーレスの可変サイズウィンドウに、選択矩形のライブキャプチャをNTSC/CRTシェーダー経由で表示します。
-- ライブキャプチャは `DisplayServer.screen_get_image_rect()` を N フレーム毎（既定3フレーム＝約20Hz、メニューで変更可）に実行します。
-- 注意: TVウィンドウ自身が選択矩形と重なる場合、自分自身が映り込みます（仕様）。
+- Selection mode is entered on first launch when no saved rectangle exists, or when the TV image is left-clicked.
+- TurnTV minimizes its own window, waits approximately 0.3 seconds, and captures a still image of the entire desktop with `DisplayServer.screen_get_image()`.
+- The window then expands to cover the screen and displays a dark overlay over the still image, similar to a standard screenshot tool.
+- Drag with the left mouse button to define a rectangle. The selected area remains bright while the outside area is dimmed, and the rectangle size is shown in pixels.
+- Releasing the mouse button confirms the rectangle and enters TV mode. The minimum selection size is 8x8 pixels.
+- Esc cancels selection. TurnTV returns to TV mode if a rectangle was already confirmed; otherwise, the application exits.
+- Rectangle coordinates are stored as absolute desktop coordinates and support multiple monitors.
+- Coordinate conversion compensates for the ratio between the still image's physical pixel size and the window size. The visible selection therefore maps to the capture position even when the window does not exactly match the screen because of the taskbar or DPI scaling.
 
-## 3. TV画像の構成（レンダリングパイプライン）
+### 2.2 TV mode (TV)
 
-Gemidius と同じ2段構成です。
+- A live capture of the selected rectangle is shown in a resizable borderless window through the NTSC/CRT shader pipeline.
+- `DisplayServer.screen_get_image_rect()` updates the live capture every N frames. The default is every 3 frames, approximately 20 Hz, and can be changed from the parameter panel.
+- If the TV window overlaps the selected desktop region, it captures itself. This is expected behavior.
 
+## 3. TV rendering pipeline
+
+TurnTV uses the same two-stage design as the retro game currently in development.
+
+```text
+[Desktop capture Image]
+   -> ImageTexture
+[NTSC canvas SubViewport]  default 320x240; capture centered over black
+   -> ViewportTexture
+[Stage 1 SubViewport + crt_signal.gdshader]  NTSC/RF signal degradation
+   -> ViewportTexture
+[Stage 2 ColorRect + crt_display.gdshader]   CRT display simulation
+   ->
+[Main window]
 ```
-[画面キャプチャImage]
-   ↓ ImageTexture
-[NTSCキャンバス SubViewport]  … 既定 320x240（黒背景の中央にキャプチャ画像を配置）
-   ↓ ViewportTexture
-[Stage1 SubViewport + crt_signal.gdshader]  … NTSC/RF信号劣化（色にじみ・偽色・同期揺れ・離調・ゴースト・スノー）
-   ↓ ViewportTexture
-[Stage2 ColorRect + crt_display.gdshader]   … CRT表示（走査線・蛍光体マスク・RGBずれ・ハレーション・画面カーブ・ベゼル）
-   ↓
-メインウィンドウに表示
-```
 
-- **NTSCキャンバス**: 既定 320x240（4:3、NTSC 240p相当）。ユーザー要望の「240x200ぐらい」も含め、パラメータメニューで幅・高さを変更可能（160〜720）。
-- 選択矩形がキャンバスより大きい場合は、アスペクト維持でキャンバス内に収まるよう縮小して中央配置します。小さい場合は等倍で中央配置します（周囲は黒＝TVの無信号部）。
-- **表示拡大率**: 「選択矩形部分」がウィンドウの短辺方向で約90%を占める拡大率 k を自動計算し、Stage2出力（キャンバス全体× k）をウィンドウ中央に表示します。キャンバスの余白部分がウィンドウ外へはみ出すことがあります（クリップ表示）。
-- マウスホイールで表示倍率（ズーム、0.1〜8.0倍）を上記 k に乗算します。
+- **NTSC canvas:** The default resolution is 320x240, representing a 4:3 240p-class signal. Width and height can be adjusted from the parameter panel within 160-720 and 120-540 respectively.
+- If the selected rectangle is larger than the canvas, it is scaled down to fit while preserving its aspect ratio and is centered. Smaller selections remain at 1:1 scale. Unused canvas space is black, representing the no-signal area around the picture.
+- **Display scale:** TurnTV calculates a scale factor `k` so that the selected picture occupies approximately 90% of the window along the limiting axis. The complete Stage 2 canvas is scaled by `k` and centered. Black canvas margins may extend beyond the window and be clipped.
+- Mouse-wheel zoom multiplies `k` by an adjustable value from 0.1x to 8.0x.
 
-## 4. マウス／キー操作（TVモード）
+## 4. Mouse and keyboard controls in TV mode
 
-| 操作 | 動作 |
+| Input | Action |
 |---|---|
-| 左クリック（動かさず離す） | 矩形選択モードへ |
-| 左ドラッグ（中央部） | 選択矩形（映す場所）の移動。TV画像を掴んで動かす操作感で、マウス移動と逆方向へ矩形が移動し、スクリーン範囲内へクランプされる |
-| 中ボタンドラッグ | ウィンドウ移動（`DisplayServer.window_start_drag`） |
-| 左ドラッグ（外周10px） | ウィンドウリサイズ（`DisplayServer.window_start_resize`、カーソル形状も追従） |
-| ホイール上下 | 表示ズームイン／アウト（×1.1刻み） |
-| 右クリック | パラメータ調節メニューの表示／非表示 |
-| 右上の ✕ ボタン | 設定保存して終了 |
-| ESC | 設定保存して終了 |
+| Left click without moving | Enter selection mode |
+| Left drag in the center | Move the selected capture region in the opposite direction of the mouse, producing the feel of dragging the displayed picture; clamp it to the source screen |
+| Middle-button drag | Move the window using `DisplayServer.window_start_drag` |
+| Left drag within 10 px of an edge | Resize the window using `DisplayServer.window_start_resize`; update the cursor shape to match |
+| Mouse wheel | Zoom in or out in 1.1x steps |
+| Right click | Show or hide the parameter panel |
+| Top-right X button | Save settings and exit |
+| Esc | Save settings and exit |
 
-## 5. パラメータ調節メニュー
+## 5. Parameter panel
 
-右クリックでウィンドウ右側にスライダーパネルを表示します。既定値は Gemidius の「コンポジットTVプリセット」（BaseState.gd の `Crt_composite_*` / `Crt_shared_*`）です。
+Right-clicking opens a slider panel on the right side of the window. Defaults are based on the Composite TV preset used by the retro game currently in development (`Crt_composite_*` and `Crt_shared_*` in `BaseState.gd`).
 
-### 5.1 Stage1（NTSC信号）
-| uniform | 既定値 | 範囲 |
-|---|---|---|
-| signal_amount | 1.0 | 0〜1 |
-| composite_artifact | 0.85 | 0〜2 |
-| composite_fringing | 0.65 | 0〜2 |
-| subcarrier_phase_px | 1.047 | 0.1〜3.14 |
-| line_phase_amount | 2.094 | 0〜6.283 |
-| phase_jitter | 0.025 | 0〜0.25 |
-| chroma_delay_px | 1.25 | -8〜8 |
-| y_band_px | 1.25 | 0.5〜5 |
-| i_band_px | 2.75 | 1〜9 |
-| q_band_px | 4.25 | 1〜12 |
-| ghost_strength | 0.08 | 0〜0.5 |
-| ghost_offset_px | 6.0 | 0〜32 |
-| noise_luma | 0.012 | 0〜0.1 |
-| noise_chroma | 0.018 | 0〜0.1 |
-| rgb_bypass_mix | 0.0 | 0〜1 |
-| rf_amount | 0.20 | 0〜1 |
-| sync_jitter_px | 0.18 | 0〜4 |
-| rf_tuning_error | 0.08 | -1〜1 |
-| burst_phase_noise | 0.03 | 0〜0.5 |
-| rf_snow | 0.015 | 0〜0.25 |
-| rf_gain_wobble | 0.015 | 0〜0.25 |
-| hue_deg | 0.0 | -45〜45 |
-| saturation | 1.0 | 0〜2 |
+### 5.1 Stage 1: NTSC/RF signal
 
-### 5.2 Stage2（CRT表示）
-| uniform | 既定値 | 範囲 |
-|---|---|---|
-| display_amount | 1.0 | 0〜1 |
-| scanline_strength | 0.42 | 0〜1 |
-| scanline_width_dark | 0.18 | 0.05〜1 |
-| scanline_width_bright | 0.42 | 0.05〜1 |
-| mask_type | 1（スロット） | 0=OFF/1=スロット/2=アパーチャーグリル/3=シャドウ |
-| mask_strength | 0.45 | 0〜1 |
-| mask_pitch_px | 3.6 | 2〜8 |
-| mask_dark | 0.45 | 0〜1 |
-| mask_softness | 0.35 | 0〜2 |
-| brightness_compensation | 1.22 | 0.5〜2 |
-| gamma_in | 2.4 | 1〜3 |
-| gamma_out | 2.2 | 1〜3 |
-| curve_amount | 0.040 | 0〜0.2 |
-| corner_radius | 0.045 | 0〜0.15 |
-| vignette_strength | 0.18 | 0〜1 |
-| bezel_strength | 0.35 | 0〜1 |
-| interlace_enabled | false | ON/OFF |
-| interlace_dim | 0.72 | 0〜1 |
-| interlace_bob_px | 0.5 | 0〜1 |
-| horizontal_sharpness | 0.15 | 0〜1.5 |
-| convergence_x_px | 0.25 | -4〜4 |
-| convergence_y_px | 0.0 | -4〜4 |
-| halation_strength | 0.12 | 0〜1 |
-| halation_radius_px | 1.5 | 0.5〜8 |
-| halation_threshold | 0.65 | 0〜1 |
+| Uniform | Default | Range |
+|---|---:|---:|
+| `signal_amount` | 1.0 | 0-1 |
+| `composite_artifact` | 0.85 | 0-2 |
+| `composite_fringing` | 0.65 | 0-2 |
+| `subcarrier_phase_px` | 1.047 | 0.1-3.14 |
+| `line_phase_amount` | 2.094 | 0-6.283 |
+| `phase_jitter` | 0.025 | 0-0.25 |
+| `chroma_delay_px` | 1.25 | -8 to 8 |
+| `y_band_px` | 1.25 | 0.5-5 |
+| `i_band_px` | 2.75 | 1-9 |
+| `q_band_px` | 4.25 | 1-12 |
+| `ghost_strength` | 0.08 | 0-0.5 |
+| `ghost_offset_px` | 6.0 | 0-32 |
+| `noise_luma` | 0.012 | 0-0.1 |
+| `noise_chroma` | 0.018 | 0-0.1 |
+| `rgb_bypass_mix` | 0.0 | 0-1 |
+| `rf_amount` | 0.20 | 0-1 |
+| `sync_jitter_px` | 0.18 | 0-4 |
+| `rf_tuning_error` | 0.08 | -1 to 1 |
+| `burst_phase_noise` | 0.03 | 0-0.5 |
+| `rf_snow` | 0.015 | 0-0.25 |
+| `rf_gain_wobble` | 0.015 | 0-0.25 |
+| `hue_deg` | 0.0 | -45 to 45 |
+| `saturation` | 1.0 | 0-2 |
 
-### 5.3 映像プリセット
+### 5.2 Stage 2: CRT display
 
-| プリセット | 内容 |
+| Uniform | Default | Range |
+|---|---:|---:|
+| `display_amount` | 1.0 | 0-1 |
+| `scanline_strength` | 0.42 | 0-1 |
+| `scanline_width_dark` | 0.18 | 0.05-1 |
+| `scanline_width_bright` | 0.42 | 0.05-1 |
+| `mask_type` | 1 (slot) | 0=Off / 1=Slot / 2=Aperture grille / 3=Shadow mask |
+| `mask_strength` | 0.45 | 0-1 |
+| `mask_pitch_px` | 3.6 | 2-8 |
+| `mask_dark` | 0.45 | 0-1 |
+| `mask_softness` | 0.35 | 0-2 |
+| `brightness_compensation` | 1.22 | 0.5-2 |
+| `gamma_in` | 2.4 | 1-3 |
+| `gamma_out` | 2.2 | 1-3 |
+| `curve_amount` | 0.040 | 0-0.2 |
+| `corner_radius` | 0.045 | 0-0.15 |
+| `vignette_strength` | 0.18 | 0-1 |
+| `bezel_strength` | 0.35 | 0-1 |
+| `interlace_enabled` | false | On/Off |
+| `interlace_dim` | 0.72 | 0-1 |
+| `interlace_bob_px` | 0.5 | 0-1 |
+| `horizontal_sharpness` | 0.15 | 0-1.5 |
+| `convergence_x_px` | 0.25 | -4 to 4 |
+| `convergence_y_px` | 0.0 | -4 to 4 |
+| `halation_strength` | 0.12 | 0-1 |
+| `halation_radius_px` | 1.5 | 0.5-8 |
+| `halation_threshold` | 0.65 | 0-1 |
+
+### 5.3 Video presets
+
+| Preset | Description |
 |---|---|
-| CRT Studio | RF揺れを抑え、シャープネス・ハレーション・RGBずれを活かす高品位CRT |
-| Famicom RF | 偽色・にじみ・同期揺れ・離調・スノー・AGC揺れを強めたRF接続 |
-| 軽量 | Stage1の17タップFIRと追加光学フェッチをバイパスし、走査線・マスク中心で表示 |
+| CRT Studio | A high-quality CRT image that minimizes RF instability and emphasizes sharpness, halation, and RGB convergence error |
+| Famicom RF | An RF-connected look with stronger false color, bleeding, sync instability, tuning error, snow, and AGC variation |
+| Lightweight | Bypasses the Stage 1 17-tap FIR and additional optical samples while retaining scanlines and the phosphor mask |
 
-プリセットは映像値だけを変更し、キャプチャ間隔、キャンバスサイズ、最前面設定は変更しません。適用後の値は個別調整でき、その値が設定JSONへ保存されます。
+Presets change only video parameters. They do not change the capture interval, canvas size, or always-on-top setting. Every value can still be adjusted after applying a preset, and the resulting values are saved to the settings JSON.
 
-### 5.4 アプリ設定
-| 項目 | 既定値 | 範囲 |
-|---|---|---|
-| 常に最前面 | ON | ON/OFF |
-| キャプチャ間隔（フレーム） | 3 | 1〜30 |
-| NTSCキャンバス幅 | 320 | 160〜720 |
-| NTSCキャンバス高さ | 240 | 120〜540 |
+### 5.4 Application settings
 
-「常に最前面」ONで、他のツールと併用してもTVウィンドウが最前面に維持されます（既定ON）。
+| Setting | Default | Range |
+|---|---:|---:|
+| Always on top | On | On/Off |
+| Capture interval in frames | 3 | 1-30 |
+| NTSC canvas width | 320 | 160-720 |
+| NTSC canvas height | 240 | 120-540 |
 
-- 「既定値に戻す」ボタンで全パラメータをコンポジットTVプリセットへ戻します。
-- 「再選択」ボタンでも矩形選択モードへ入れます（左クリックと同じ）。
+When Always on top is enabled, the TV window remains above other tools. It is enabled by default.
 
-## 6. 設定の保存
+- **Reset to defaults** restores all parameters to the Composite TV preset.
+- **Select region again** enters selection mode, equivalent to left-clicking the TV image.
 
-終了時に `user://turntv_settings.json`（保存version 2）へ以下を保存し、次回起動時に復元します。version 1の設定は既存キーをそのまま読み、新規パラメータだけ既定値で補います。
+## 6. Settings persistence
 
-- 全シェーダーパラメータとアプリ設定
-- 選択矩形（絶対座標）とキャプチャ対象スクリーン番号
-- TVウィンドウの位置・サイズ・ズーム値
+On exit, TurnTV writes the following values to `user://turntv_settings.json` using settings format version 2 and restores them at the next launch. Version 1 files remain compatible: existing keys are loaded, while new parameters retain their defaults.
 
-保存済み矩形がある場合は起動直後からTVモードで開始します。
+- All shader parameters and application settings
+- The selected rectangle in absolute desktop coordinates and the source screen number
+- TV window position and size, plus the zoom value
 
-## 7. ファイル構成
+If a valid rectangle has been saved, TurnTV starts directly in TV mode.
 
-| ファイル | 内容 |
+## 7. Files
+
+| File | Purpose |
 |---|---|
-| `project.godot` | メインシーン・ボーダーレス等のウィンドウ設定 |
-| `main.tscn` | ルートControl（main.gd をアタッチ） |
-| `main.gd` | 全ロジック（モード管理・キャプチャ・レイアウト・UI生成） |
-| `crt_signal.gdshader` | Stage1: NTSCコンポジット信号経路（Gemidiusから移植） |
-| `crt_display.gdshader` | Stage2: CRT表示・蛍光体表示側（Gemidiusから移植） |
-| `SPEC_TurnTV.md` | 本仕様書 |
+| `project.godot` | Main scene and borderless-window project settings |
+| `main.tscn` | Root `Control` node with `main.gd` attached |
+| `main.gd` | Mode management, capture, layout, input, settings, and generated UI |
+| `crt_signal.gdshader` | Stage 1 NTSC composite/RF signal path, ported from a retro game currently in development |
+| `crt_display.gdshader` | Stage 2 CRT display and phosphor simulation, ported from a retro game currently in development |
+| `SPEC_TurnTV.md` | English specification (this document) |
+| `SPEC_Turn_ja.md` | Japanese specification |
 
-## 8. デバッグ用環境変数
+## 8. Debug environment variables
 
-通常運用では設定不要です。座標ずれ調査・自動テスト用に以下を用意しています。
+These variables are intended for coordinate diagnostics and automated testing; normal use does not require them.
 
-| 環境変数 | 動作 |
+| Variable | Behavior |
 |---|---|
-| `TURNTV_SHOT=<PNGパス>` | 起動約3秒後にウィンドウ内容をPNG保存 |
-| `TURNTV_DUMP=<PNGパス>` | 最初のライブキャプチャ生画像をPNG保存（`<パス>.crop.png` に全画面取得+切り出し方式の比較画像も保存） |
-| `TURNTV_GRADIENT=<スクリーン番号>` | 全ピクセルに自身の座標を色でエンコードしたグラデーションを全画面表示する検証モードで起動（R=x%256, G=y%256, B=(x/256)*16+(y/256)）。キャプチャ画像をデコードすると実際の取り込み座標が判定できる |
+| `TURNTV_SHOT=<PNG path>` | Save the window contents to a PNG approximately three seconds after launch |
+| `TURNTV_DUMP=<PNG path>` | Save the first raw live-capture image; also save a full-screen-capture-and-crop comparison as `<path>.crop.png` |
+| `TURNTV_GRADIENT=<screen number>` | Start in a full-screen diagnostic mode where every pixel encodes its position as color: R=`x % 256`, G=`y % 256`, B=`(x / 256) * 16 + (y / 256)`. Decoding a captured color reveals the actual sampled coordinate |
 
-## 9. 既知の制約
+## 9. Known limitations
 
-- **プロジェクト設定の `display/window/stretch/mode` は「disabled」必須です。** viewport等へ変更するとマウス座標が640x480のコンテンツ空間へ変換され、選択矩形とキャプチャ領域が大きくずれます（2026-07-13に実際に発生し、グラデーション診断で特定）。対策としてコード側（`_ready`）でも起動時に強制無効化しています。NTSCの低解像度表現は内部のSubViewportパイプラインが担うため、プロジェクト側のstretchは不要です。
-
-- Windows のディスプレイ拡大率が100%以外の場合、選択座標とキャプチャ座標がずれる可能性があります（Godotのウィンドウ座標は物理px、拡大率環境は未検証）。
-- 排他フルスクリーンのゲームやDRM保護されたウィンドウ（動画配信等）はキャプチャできない場合があります。
-- TVウィンドウが選択矩形に重なると自己映り込みが発生します。
-- キャプチャは `screen_get_image_rect` によるポーリングのため、間隔を短くするとCPU負荷が上がります。
+- **`display/window/stretch/mode` must remain `disabled`.** Other modes convert mouse coordinates into the 640x480 content space, which causes large errors between the selected rectangle and the captured region. This failure was reproduced and isolated with the gradient diagnostic on July 13, 2026. `_ready()` also forces content scaling off at runtime. Low-resolution NTSC rendering is handled by the internal SubViewport pipeline, so project-level stretching is unnecessary.
+- At Windows display scaling values other than 100%, selection and capture coordinates may not match. Godot window coordinates are physical pixels, and scaled environments have not yet been verified.
+- Exclusive full-screen games and DRM-protected windows, including some streaming video applications, may not be capturable.
+- The TV window captures itself when it overlaps the selected desktop region.
+- Capture uses polling through `screen_get_image_rect`; shorter intervals increase CPU usage.

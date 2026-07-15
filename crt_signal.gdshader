@@ -1,5 +1,5 @@
 // CRT表現 Stage1（NTSCコンポジット信号経路）用シェーダーです。
-// Gemidius BaseState.gd の CRT_SIGNAL_SHADER_CODE からの移植です。
+// 作成中のレトロゲームの BaseState.gd にある CRT_SIGNAL_SHADER_CODE からの移植です。
 // 設計書: CRT_SHADER_DESIGN_20260711.md §3（Stage1設計）・§7（プリセット）
 // 入力: NTSCキャンバスSubViewportの低解像度画像（ViewportTexture）
 // 出力: NTSCコンポジット接続の信号劣化（色にじみ・偽色・ドットクロール・ゴースト・ノイズ）を

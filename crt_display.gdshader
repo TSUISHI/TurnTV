@@ -1,5 +1,5 @@
 // CRT表現 Stage2（CRT表示・蛍光体表示側）用シェーダーです。
-// Gemidius BaseState.gd の CRT_DISPLAY_SHADER_CODE からの移植です。
+// 作成中のレトロゲームの BaseState.gd にある CRT_DISPLAY_SHADER_CODE からの移植です。
 // 設計書: CRT_SHADER_DESIGN_20260711.md §4（Stage2設計）・§7（プリセット）
 // 入力: Stage1のSubViewport出力（NTSC信号経路を通った低解像度画像）
 // 出力: 最終表示解像度でのCRT表示。走査線、輝度依存ビーム幅、マスク3方式、画面カーブ、

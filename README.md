@@ -1,67 +1,69 @@
 # TurnTV
 
-デスクトップ画面の任意の矩形領域をマウスで指定し、その領域を「NTSCコンポジット接続のブラウン管テレビ」風の映像としてリアルタイム表示するツールです。
+English | [日本語](README_ja.md)
 
-Godot 4.6（GL Compatibility）製。CRTシェーダーは別プロジェクト（シューティングゲーム）の2段構成（NTSC信号経路 + CRT表示）を移植し、ShaderGlassの多段CRT表現と実NTSC-J RFデコーダの信号挙動を参考に拡張したものです。
+TurnTV lets you select any rectangular area of the Windows desktop and display it in real time as if it were shown on a CRT television connected through NTSC composite video.
 
-## 使い方
+It is built with Godot 4.6 using the GL Compatibility renderer. Its two-stage CRT shader pipeline—NTSC signal processing followed by CRT display simulation—was ported from a retro game currently in development and expanded with techniques inspired by ShaderGlass and a real-time NTSC-J RF decoder.
 
-1. 起動すると画面全体が暗くなるので、TV表示したい領域をドラッグで選択します。
-2. 選択した領域がNTSC/CRT風の映像としてウィンドウ表示されます（ライブ更新）。
+## Usage
 
-### TVウィンドウの操作
+1. Start TurnTV. The desktop is dimmed while selection mode is active.
+2. Drag over the area you want to display. The selected region opens in a live NTSC/CRT-style window.
 
-| 操作 | 動作 |
+### TV window controls
+
+| Input | Action |
 |---|---|
-| 左クリック | 矩形の再選択 |
-| 左ドラッグ | 映す場所（選択矩形）の移動 |
-| 中ボタンドラッグ | ウィンドウ移動 |
-| 外周ドラッグ | ウィンドウリサイズ |
-| マウスホイール | 表示ズーム |
-| 右クリック | パラメータ調節メニュー |
-| 右上の ✕ / ESC | 終了（設定は自動保存） |
+| Left click | Select a new capture region |
+| Left drag | Move the captured region |
+| Middle-button drag | Move the window |
+| Drag the window edge | Resize the window |
+| Mouse wheel | Adjust display zoom |
+| Right click | Show or hide the parameter panel |
+| Top-right X / Esc | Save settings and exit |
 
-パラメータメニューでは、色にじみ・偽色・RF同期揺れ・離調・スノー・走査線・蛍光体マスク・RGBコンバージェンス・ハレーションなど50項目以上を調節できます。「CRT Studio」「Famicom RF」「軽量」の3プリセットも即時適用できます。
+The parameter panel exposes more than 50 controls, including color bleeding, false color, RF sync instability, tuning error, snow, scanlines, phosphor masks, RGB convergence, and halation. Three presets—`CRT Studio`, `Famicom RF`, and `Lightweight`—can also be applied instantly.
 
-## CRT/RFアップグレード
+## CRT/RF upgrade
 
-- [ShaderGlass](https://github.com/mausimus/ShaderGlass)を参考に、用途別プリセット、水平シャープネス、RGBコンバージェンスずれ、明部ハレーションを追加しました。
-- [famicom-rf-hackrf-decoder](https://github.com/GOROman/famicom-rf-hackrf-decoder)を参考に、水平同期PLL残差、RF離調、カラーバースト位相揺れ、AGC揺れ、RFスノー、復調後の色相・彩度補正を追加しました。
-- 参照コードの直写しではなく、TurnTVのGodotシェーダー向けに独自実装しています。
+- [ShaderGlass](https://github.com/mausimus/ShaderGlass) inspired the preset workflow, horizontal sharpness, RGB convergence error, and highlight halation.
+- [famicom-rf-hackrf-decoder](https://github.com/GOROman/famicom-rf-hackrf-decoder) inspired the horizontal-sync PLL residual, RF tuning error, color-burst phase instability, AGC variation, RF snow, and post-demodulation hue and saturation controls.
+- The implementation was written specifically for TurnTV's Godot shaders; source code from the reference projects was not copied verbatim.
 
-## GPU負荷と軽量設定
+## GPU performance and lightweight settings
 
-通常の640×480程度のウィンドウであれば、古い内蔵GPUでも動作する可能性が高い設計です。ただし、Stage2はTVウィンドウの表示ピクセル数に比例して重くなるため、低性能GPUで4K表示・最大化・追加効果全ONを組み合わせると、フレームレート低下やリサイズ操作の遅延が発生する可能性があります。
+At a typical 640x480 window size, TurnTV is likely to run even on older integrated graphics. Stage 2 scales with the number of displayed pixels, however, so low-end GPUs may show reduced frame rate or sluggish resizing when a 4K or maximized window is combined with all additional effects.
 
-- Stage1は既定320×240の低解像度で17タップ処理を行うため、負荷の増加は比較的小さめです。
-- Stage2のハレーションは4サンプル、RGBコンバージェンスは2サンプル、水平シャープネスは2サンプルを表示ピクセルごとに追加します。
-- デスクトップキャプチャは主にCPU側の負荷です。キャプチャ間隔を増やすとCPU負荷は下がりますが、毎フレーム描画するCRTシェーダーのGPU負荷にはあまり影響しません。
+- Stage 1 runs its 17-tap filter at the default low resolution of 320x240, so its cost is relatively small.
+- Stage 2 adds four texture samples for halation, two for RGB convergence, and two for horizontal sharpness for every displayed pixel.
+- Desktop capture is primarily a CPU-side cost. Increasing the capture interval can reduce CPU usage, but has little effect on the GPU cost of the CRT shaders, which render every frame.
 
-低性能環境では、最初に「軽量」プリセットを選んでください。このプリセットはStage1の17タップ処理と追加光学サンプルをバイパスします。個別調整する場合は、次の順で設定を下げると効果的です。
+On low-end systems, start with the `Lightweight` preset. It bypasses the Stage 1 17-tap filter and the additional optical samples. For manual tuning, reduce settings in this order:
 
-1. `halation_strength`（ハレーション強度）を0にする。
-2. `convergence_x_px`と`convergence_y_px`（RGB横・縦ずれ）を0にする。
-3. `horizontal_sharpness`（水平シャープネス）を0にする。
-4. TVウィンドウを小さくする。
-5. CPU負荷も高い場合だけ、キャプチャ間隔を増やす。
+1. Set `halation_strength` to 0.
+2. Set `convergence_x_px` and `convergence_y_px` to 0.
+3. Set `horizontal_sharpness` to 0.
+4. Reduce the TV window size.
+5. Increase the capture interval only if CPU usage is also high.
 
-現在はGPU性能やフレームレートに応じた自動画質切替には対応していません。
+Automatic quality adjustment based on GPU performance or frame rate is not currently implemented.
 
-## ダウンロード
+## Download
 
-[Releases](https://github.com/TSUISHI/TurnTV/releases) ページから `TurnTV.exe`（Windows x86_64、pck埋め込み単体実行ファイル）をダウンロードして実行できます。
+Download `TurnTV.exe` from the [Releases](https://github.com/TSUISHI/TurnTV/releases) page. It is a standalone Windows x86_64 executable with the PCK embedded.
 
-ダウンロード後、改ざんされていないことを以下のSHA256ハッシュで確認できます：
+Verify the downloaded file with this SHA-256 hash:
 
 ```
 SHA256: 55ED455DC69BA77C12B33ADE0A814794916C332C5336FCA55B74C395E9493109
 ```
 
-確認コマンド（PowerShell）: `Get-FileHash TurnTV.exe -Algorithm SHA256`
+PowerShell verification command: `Get-FileHash TurnTV.exe -Algorithm SHA256`
 
-## 動作環境
+## Requirements
 
-- Windows（`DisplayServer.screen_get_image` による画面キャプチャを使用）
-- Godot 4.6 以降（実行には Godot エディタ/ランタイムでプロジェクトを開いて実行）
+- Windows; desktop capture uses `DisplayServer.screen_get_image`
+- Godot 4.6 or later when running the project from source
 
-詳細仕様は [SPEC_TurnTV.md](SPEC_TurnTV.md)、今回の設計契約は [CODEX_SPEC_TURNTV_CRT_UPGRADE_20260715.md](CODEX_SPEC_TURNTV_CRT_UPGRADE_20260715.md) を参照してください。
+See [SPEC_TurnTV.md](SPEC_TurnTV.md) for the full specification, [SPEC_Turn_ja.md](SPEC_Turn_ja.md) for the Japanese version, and [CODEX_SPEC_TURNTV_CRT_UPGRADE_20260715.md](CODEX_SPEC_TURNTV_CRT_UPGRADE_20260715.md) for the upgrade design contract.
