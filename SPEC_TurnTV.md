@@ -8,7 +8,7 @@ Created: July 13, 2026 / Target engine: Godot 4.6.3 (GL Compatibility) / Reposit
 
 TurnTV lets the user select any rectangular area of the desktop and display it in a separate window as if it were shown on a CRT television connected through NTSC composite video.
 
-The TV shaders were ported from a retro game currently in development (`CRT_SIGNAL_SHADER_CODE` and `CRT_DISPLAY_SHADER_CODE` in `BaseState.gd`, documented in `CRT_SHADER_DESIGN_20260711.md`).
+The TV shaders were ported from a retro game currently in development (`CRT_SIGNAL_SHADER_CODE` and `CRT_DISPLAY_SHADER_CODE` in `BaseState.gd`).
 
 ## 2. Operating modes
 
