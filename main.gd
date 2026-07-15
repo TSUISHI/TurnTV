@@ -45,6 +45,15 @@ const PARAM_DEFS: Array = [
     {"name": "noise_luma", "label": "輝度ノイズ", "min": 0.0, "max": 0.1, "step": 0.0005, "def": 0.012, "target": TARGET_SIGNAL},
     {"name": "noise_chroma", "label": "色ノイズ", "min": 0.0, "max": 0.1, "step": 0.0005, "def": 0.018, "target": TARGET_SIGNAL},
     {"name": "rgb_bypass_mix", "label": "RGBバイパス率", "min": 0.0, "max": 1.0, "step": 0.001, "def": 0.0, "target": TARGET_SIGNAL},
+    {"section": "Stage1: RF受信表現"},
+    {"name": "rf_amount", "label": "RF効果 全体量", "min": 0.0, "max": 1.0, "step": 0.001, "def": 0.20, "target": TARGET_SIGNAL},
+    {"name": "sync_jitter_px", "label": "水平同期揺れ[px]", "min": 0.0, "max": 4.0, "step": 0.001, "def": 0.18, "target": TARGET_SIGNAL},
+    {"name": "rf_tuning_error", "label": "RF離調", "min": -1.0, "max": 1.0, "step": 0.001, "def": 0.08, "target": TARGET_SIGNAL},
+    {"name": "burst_phase_noise", "label": "バースト位相揺れ", "min": 0.0, "max": 0.5, "step": 0.001, "def": 0.03, "target": TARGET_SIGNAL},
+    {"name": "rf_snow", "label": "RFスノー", "min": 0.0, "max": 0.25, "step": 0.0005, "def": 0.015, "target": TARGET_SIGNAL},
+    {"name": "rf_gain_wobble", "label": "AGC揺れ", "min": 0.0, "max": 0.25, "step": 0.0005, "def": 0.015, "target": TARGET_SIGNAL},
+    {"name": "hue_deg", "label": "色相補正[度]", "min": -45.0, "max": 45.0, "step": 0.1, "def": 0.0, "target": TARGET_SIGNAL},
+    {"name": "saturation", "label": "彩度", "min": 0.0, "max": 2.0, "step": 0.001, "def": 1.0, "target": TARGET_SIGNAL},
     {"section": "Stage2: CRT表示"},
     {"name": "display_amount", "label": "CRT表示 全体量", "min": 0.0, "max": 1.0, "step": 0.001, "def": 1.0, "target": TARGET_DISPLAY},
     {"name": "scanline_strength", "label": "走査線強度", "min": 0.0, "max": 1.0, "step": 0.001, "def": 0.42, "target": TARGET_DISPLAY},
@@ -65,12 +74,47 @@ const PARAM_DEFS: Array = [
     {"name": "interlace_enabled", "label": "480i風表示", "def": false, "target": TARGET_DISPLAY, "type": "bool"},
     {"name": "interlace_dim", "label": "480i減光", "min": 0.0, "max": 1.0, "step": 0.001, "def": 0.72, "target": TARGET_DISPLAY},
     {"name": "interlace_bob_px", "label": "480i上下揺れ[px]", "min": 0.0, "max": 1.0, "step": 0.001, "def": 0.5, "target": TARGET_DISPLAY},
+    {"section": "Stage2: CRT光学"},
+    {"name": "horizontal_sharpness", "label": "水平シャープネス", "min": 0.0, "max": 1.5, "step": 0.001, "def": 0.15, "target": TARGET_DISPLAY},
+    {"name": "convergence_x_px", "label": "RGB横ずれ[px]", "min": -4.0, "max": 4.0, "step": 0.001, "def": 0.25, "target": TARGET_DISPLAY},
+    {"name": "convergence_y_px", "label": "RGB縦ずれ[px]", "min": -4.0, "max": 4.0, "step": 0.001, "def": 0.0, "target": TARGET_DISPLAY},
+    {"name": "halation_strength", "label": "ハレーション強度", "min": 0.0, "max": 1.0, "step": 0.001, "def": 0.12, "target": TARGET_DISPLAY},
+    {"name": "halation_radius_px", "label": "ハレーション半径[px]", "min": 0.5, "max": 8.0, "step": 0.001, "def": 1.5, "target": TARGET_DISPLAY},
+    {"name": "halation_threshold", "label": "ハレーション閾値", "min": 0.0, "max": 1.0, "step": 0.001, "def": 0.65, "target": TARGET_DISPLAY},
     {"section": "アプリ設定"},
     {"name": "always_on_top", "label": "常に最前面", "def": true, "target": TARGET_APP, "type": "bool"},
     {"name": "capture_interval", "label": "キャプチャ間隔[フレーム]", "min": 1, "max": 30, "step": 1, "def": 3, "target": TARGET_APP, "type": "int"},
     {"name": "canvas_width", "label": "NTSCキャンバス幅", "min": 160, "max": 720, "step": 2, "def": 320, "target": TARGET_APP, "type": "int"},
     {"name": "canvas_height", "label": "NTSCキャンバス高さ", "min": 120, "max": 540, "step": 2, "def": 240, "target": TARGET_APP, "type": "int"},
 ]
+
+# ShaderGlassのプリセット運用をTurnTV向けに絞った3種です。選択名ではなく適用後の値を保存します。
+const PRESET_CRT_STUDIO: Dictionary = {
+    "signal_amount": 0.92, "composite_artifact": 0.38, "composite_fringing": 0.32,
+    "phase_jitter": 0.008, "chroma_delay_px": 0.45, "ghost_strength": 0.025,
+    "noise_luma": 0.004, "noise_chroma": 0.005, "rf_amount": 0.0,
+    "sync_jitter_px": 0.0, "rf_tuning_error": 0.0, "burst_phase_noise": 0.0,
+    "rf_snow": 0.0, "rf_gain_wobble": 0.0, "saturation": 1.0,
+    "scanline_strength": 0.38, "mask_strength": 0.52, "brightness_compensation": 1.24,
+    "horizontal_sharpness": 0.42, "convergence_x_px": 0.45, "convergence_y_px": 0.12,
+    "halation_strength": 0.22, "halation_radius_px": 2.25, "halation_threshold": 0.58,
+}
+const PRESET_FAMICOM_RF: Dictionary = {
+    "signal_amount": 1.0, "composite_artifact": 1.15, "composite_fringing": 0.92,
+    "phase_jitter": 0.055, "chroma_delay_px": 1.85, "ghost_strength": 0.13,
+    "noise_luma": 0.018, "noise_chroma": 0.026, "rf_amount": 1.0,
+    "sync_jitter_px": 0.85, "rf_tuning_error": 0.32, "burst_phase_noise": 0.16,
+    "rf_snow": 0.055, "rf_gain_wobble": 0.075, "saturation": 1.15,
+    "scanline_strength": 0.46, "mask_strength": 0.40, "brightness_compensation": 1.27,
+    "horizontal_sharpness": 0.08, "convergence_x_px": 0.30, "convergence_y_px": 0.08,
+    "halation_strength": 0.16, "halation_radius_px": 1.8, "halation_threshold": 0.62,
+}
+const PRESET_LIGHTWEIGHT: Dictionary = {
+    "signal_amount": 0.0, "rgb_bypass_mix": 0.0, "rf_amount": 0.0,
+    "horizontal_sharpness": 0.0, "convergence_x_px": 0.0, "convergence_y_px": 0.0,
+    "halation_strength": 0.0, "scanline_strength": 0.34, "mask_strength": 0.34,
+    "mask_softness": 0.0, "brightness_compensation": 1.16, "display_amount": 1.0,
+}
 
 # ── 状態 ──────────────────────────────────────────────────────────────────────
 var mode: int = Mode.TV                     # 現在のモードです。
@@ -231,6 +275,19 @@ func _reset_params_to_default() -> void:
     _sync_param_controls()
 
 
+# 映像値を標準へ戻してから指定プリセットを上書きし、全uniformとUIへ反映します。
+func _apply_preset(preset_values: Dictionary) -> void:
+    # 映像プリセットはアプリ設定（キャプチャ間隔・キャンバスサイズ等）を変えず、映像値だけを既定化します。
+    for def in PARAM_DEFS:
+        if def.has("name") and int(def["target"]) != TARGET_APP:
+            param_values[def["name"]] = def["def"]
+    for param_name in preset_values:
+        if param_values.has(param_name):
+            param_values[param_name] = preset_values[param_name]
+    _apply_all_params()
+    _sync_param_controls()
+
+
 # UIコントロールの表示値を param_values に合わせます。
 func _sync_param_controls() -> void:
     for param_name in param_controls:
@@ -359,6 +416,24 @@ func _build_param_panel() -> void:
     reset_button.text = "既定値に戻す"
     reset_button.pressed.connect(_reset_params_to_default)
     button_row.add_child(reset_button)
+
+    var preset_label: Label = Label.new()
+    preset_label.text = "映像プリセット（適用後も個別調整できます）"
+    vbox.add_child(preset_label)
+    var preset_row: HBoxContainer = HBoxContainer.new()
+    vbox.add_child(preset_row)
+    var studio_button: Button = Button.new()
+    studio_button.text = "CRT Studio"
+    studio_button.pressed.connect(func() -> void: _apply_preset(PRESET_CRT_STUDIO))
+    preset_row.add_child(studio_button)
+    var rf_button: Button = Button.new()
+    rf_button.text = "Famicom RF"
+    rf_button.pressed.connect(func() -> void: _apply_preset(PRESET_FAMICOM_RF))
+    preset_row.add_child(rf_button)
+    var lightweight_button: Button = Button.new()
+    lightweight_button.text = "軽量"
+    lightweight_button.pressed.connect(func() -> void: _apply_preset(PRESET_LIGHTWEIGHT))
+    preset_row.add_child(lightweight_button)
 
     for def in PARAM_DEFS:
         if def.has("section"):
@@ -873,7 +948,7 @@ func _save_settings() -> void:
         tv_window_pos = win.position
         tv_window_size = win.size
     var data: Dictionary = {
-        "version": 1,
+        "version": 2,
         "params": param_values,
         "rect": [capture_rect.position.x, capture_rect.position.y, capture_rect.size.x, capture_rect.size.y],
         "screen": capture_screen,

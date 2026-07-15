@@ -37,9 +37,9 @@ Gemidius と同じ2段構成です。
    ↓ ImageTexture
 [NTSCキャンバス SubViewport]  … 既定 320x240（黒背景の中央にキャプチャ画像を配置）
    ↓ ViewportTexture
-[Stage1 SubViewport + crt_signal.gdshader]  … NTSC信号劣化（色にじみ・偽色・ドットクロール・ゴースト・ノイズ）
+[Stage1 SubViewport + crt_signal.gdshader]  … NTSC/RF信号劣化（色にじみ・偽色・同期揺れ・離調・ゴースト・スノー）
    ↓ ViewportTexture
-[Stage2 ColorRect + crt_display.gdshader]   … CRT表示（走査線・蛍光体マスク・画面カーブ・角丸・減光・ベゼル）
+[Stage2 ColorRect + crt_display.gdshader]   … CRT表示（走査線・蛍光体マスク・RGBずれ・ハレーション・画面カーブ・ベゼル）
    ↓
 メインウィンドウに表示
 ```
@@ -84,6 +84,14 @@ Gemidius と同じ2段構成です。
 | noise_luma | 0.012 | 0〜0.1 |
 | noise_chroma | 0.018 | 0〜0.1 |
 | rgb_bypass_mix | 0.0 | 0〜1 |
+| rf_amount | 0.20 | 0〜1 |
+| sync_jitter_px | 0.18 | 0〜4 |
+| rf_tuning_error | 0.08 | -1〜1 |
+| burst_phase_noise | 0.03 | 0〜0.5 |
+| rf_snow | 0.015 | 0〜0.25 |
+| rf_gain_wobble | 0.015 | 0〜0.25 |
+| hue_deg | 0.0 | -45〜45 |
+| saturation | 1.0 | 0〜2 |
 
 ### 5.2 Stage2（CRT表示）
 | uniform | 既定値 | 範囲 |
@@ -107,8 +115,24 @@ Gemidius と同じ2段構成です。
 | interlace_enabled | false | ON/OFF |
 | interlace_dim | 0.72 | 0〜1 |
 | interlace_bob_px | 0.5 | 0〜1 |
+| horizontal_sharpness | 0.15 | 0〜1.5 |
+| convergence_x_px | 0.25 | -4〜4 |
+| convergence_y_px | 0.0 | -4〜4 |
+| halation_strength | 0.12 | 0〜1 |
+| halation_radius_px | 1.5 | 0.5〜8 |
+| halation_threshold | 0.65 | 0〜1 |
 
-### 5.3 アプリ設定
+### 5.3 映像プリセット
+
+| プリセット | 内容 |
+|---|---|
+| CRT Studio | RF揺れを抑え、シャープネス・ハレーション・RGBずれを活かす高品位CRT |
+| Famicom RF | 偽色・にじみ・同期揺れ・離調・スノー・AGC揺れを強めたRF接続 |
+| 軽量 | Stage1の17タップFIRと追加光学フェッチをバイパスし、走査線・マスク中心で表示 |
+
+プリセットは映像値だけを変更し、キャプチャ間隔、キャンバスサイズ、最前面設定は変更しません。適用後の値は個別調整でき、その値が設定JSONへ保存されます。
+
+### 5.4 アプリ設定
 | 項目 | 既定値 | 範囲 |
 |---|---|---|
 | 常に最前面 | ON | ON/OFF |
@@ -123,7 +147,7 @@ Gemidius と同じ2段構成です。
 
 ## 6. 設定の保存
 
-終了時に `user://turntv_settings.json` へ以下を保存し、次回起動時に復元します。
+終了時に `user://turntv_settings.json`（保存version 2）へ以下を保存し、次回起動時に復元します。version 1の設定は既存キーをそのまま読み、新規パラメータだけ既定値で補います。
 
 - 全シェーダーパラメータとアプリ設定
 - 選択矩形（絶対座標）とキャプチャ対象スクリーン番号

@@ -52,6 +52,22 @@ uniform float noise_luma : hint_range(0.0, 0.1) = 0.012;
 uniform float noise_chroma : hint_range(0.0, 0.1) = 0.018;
 // RGB接続モード用の信号バイパス率。1に近いほどStage1を素通しに近づけます（コンポジットTVでは0）。
 uniform float rgb_bypass_mix : hint_range(0.0, 1.0) = 0.0;
+// RF追加効果の全体量。0なら従来のコンポジット表現だけを残します。
+uniform float rf_amount : hint_range(0.0, 1.0) = 0.20;
+// 水平同期PLLの追従残差を模したライン単位の横揺れ[ソースpx]です。
+uniform float sync_jitter_px : hint_range(0.0, 4.0) = 0.18;
+// RF離調量。サブキャリア位相へ画面内傾斜と時間ドリフトを加えます。
+uniform float rf_tuning_error : hint_range(-1.0, 1.0) = 0.08;
+// カラーバースト位相ロックの残差。ライン単位の色相揺れになります。
+uniform float burst_phase_noise : hint_range(0.0, 0.5) = 0.03;
+// RF受信由来の細粒ノイズと白いインパルスノイズの量です。
+uniform float rf_snow : hint_range(0.0, 0.25) = 0.015;
+// AGC追従残差を模した低周波の信号振幅揺れです。
+uniform float rf_gain_wobble : hint_range(0.0, 0.25) = 0.015;
+// 復調後の色相補正[degree]。実機RFデコーダのhue trimに対応します。
+uniform float hue_deg : hint_range(-45.0, 45.0) = 0.0;
+// 復調後の彩度補正。0でモノクロ、1で等倍です。
+uniform float saturation : hint_range(0.0, 2.0) = 1.0;
 
 // ─── 定数 ───────────────────────────────────────────────────────────────────
 // 円周率2π。Godotシェーダー言語に組み込み定数PIは無いため自前で定義します。
@@ -101,13 +117,26 @@ float crt_subcarrier_phase(float pixel_x, float pixel_y, float frame_index) {
     float line_phase = line_phase_amount * mod(line_index, 3.0);
     float frame_phase = line_phase_amount * mod(frame_index, 2.0);
     float jitter = (crt_hash(vec3(line_index, frame_index, 17.0)) - 0.5) * phase_jitter * CRT_TAU;
-    return pixel_x * subcarrier_phase_px + line_phase + frame_phase + jitter;
+    // 実RFデコーダのカラーバースト位相ロックと離調残差を、ライン位相の追加誤差として近似します。
+    float burst_error = (crt_hash(vec3(line_index, floor(frame_index * 0.25), 71.0)) - 0.5) * burst_phase_noise * CRT_TAU;
+    float tuning_drift = rf_tuning_error * ((pixel_x / max(source_size.x, 1.0)) + frame_index * 0.006) * CRT_TAU;
+    return pixel_x * subcarrier_phase_px + line_phase + frame_phase + jitter + rf_amount * (burst_error + tuning_drift);
 }
 
 void fragment() {
+    // 完全バイパス時は17タップFIRを含む信号処理を実行しません。
+    if (signal_amount <= 0.0001 || rgb_bypass_mix >= 0.9999) {
+        COLOR = texture(source_texture, UV);
+    } else {
     // ── 前準備: ピクセル座標・原画・1texelのUV幅 ──────────────────────────────
+    // 水平同期PLLの残差は、ラインごとの緩い揺れと更新の遅い乱数を合成して表現します。
+    float source_line = floor(UV.y * source_size.y);
+    float sync_slow = sin(source_line * 0.093 + frame_count * 0.018);
+    float sync_noise = crt_hash(vec3(source_line, floor(frame_count * 0.25), 41.0)) - 0.5;
+    float sync_offset = rf_amount * sync_jitter_px * (sync_slow * 0.65 + sync_noise * 0.70) / max(source_size.x, 1.0);
+    vec2 signal_uv = clamp(UV + vec2(sync_offset, 0.0), vec2(0.0), vec2(1.0));
     // UV(0..1)をソースピクセル座標へ変換します。位相計算はピクセル単位で行います。
-    vec2 src_px = UV * source_size;
+    vec2 src_px = signal_uv * source_size;
     // 原画RGB。最終段の signal_amount / rgb_bypass_mix ミックスの「劣化なし側」です。
     vec3 source_rgb = texture(source_texture, UV).rgb;
     // 1ソースピクセルぶんのUV幅。タップやゴーストのオフセット計算に使います。
@@ -115,8 +144,8 @@ void fragment() {
 
     // ── エッジ係数（設計書§3.5）: 左右1pxの輝度差から作り、輝度境界だけ偽色を強めます ──
     // 平坦部でルーマがクロマへ漏れ続けると画面全体が色づくため、境界に限定するゲートです。
-    float luma_left = dot(texture(source_texture, UV - vec2(texel.x, 0.0)).rgb, CRT_LUMA_WEIGHT);
-    float luma_right = dot(texture(source_texture, UV + vec2(texel.x, 0.0)).rgb, CRT_LUMA_WEIGHT);
+    float luma_left = dot(texture(source_texture, signal_uv - vec2(texel.x, 0.0)).rgb, CRT_LUMA_WEIGHT);
+    float luma_right = dot(texture(source_texture, signal_uv + vec2(texel.x, 0.0)).rgb, CRT_LUMA_WEIGHT);
     float edge_factor = clamp(abs(luma_right - luma_left) * 4.0, 0.0, 1.0);
     // ルーマ→クロマ漏れ（クロスカラー/偽色）の実効ゲイン。
     float artifact_gain = composite_artifact * edge_factor;
@@ -130,7 +159,7 @@ void fragment() {
     for (int tap = -CRT_FIR_RADIUS; tap <= CRT_FIR_RADIUS; tap++) {
         float tap_offset = float(tap);
         // タップ位置のUV。repeat_disableにより画面端はエッジクランプされます。
-        vec2 tap_uv = UV + vec2(tap_offset * texel.x, 0.0);
+        vec2 tap_uv = signal_uv + vec2(tap_offset * texel.x, 0.0);
         // タップ位置のRGBをYIQへ変換します。
         vec3 tap_yiq = CRT_RGB_TO_YIQ * texture(source_texture, tap_uv).rgb;
         // タップ位置でのサブキャリア位相と、そのcos/sinキャリアです。
@@ -167,6 +196,28 @@ void fragment() {
     yiq_signal.y += (crt_hash(vec3(src_px, frame_count + 61.0)) - 0.5) * noise_chroma;
     yiq_signal.z += (crt_hash(vec3(src_px, frame_count + 123.0)) - 0.5) * noise_chroma;
 
+    // RFのAGC追従残差。フレームとラインにまたがる低周波成分だけを使い、激しい点滅を避けます。
+    float gain_wave = sin(frame_count * 0.037 + source_line * 0.013) * 0.65
+        + (crt_hash(vec3(floor(frame_count * 0.125), source_line * 0.031, 93.0)) - 0.5) * 0.35;
+    yiq_signal *= 1.0 + rf_amount * rf_gain_wobble * gain_wave;
+
+    // 実RFデコーダと同じく復調後の色相・彩度をI/Q平面で調整します。
+    float hue_angle = hue_deg * CRT_TAU / 360.0;
+    float hue_cos = cos(hue_angle);
+    float hue_sin = sin(hue_angle);
+    vec2 rotated_iq = vec2(
+        yiq_signal.y * hue_cos - yiq_signal.z * hue_sin,
+        yiq_signal.y * hue_sin + yiq_signal.z * hue_cos) * saturation;
+    yiq_signal.y = rotated_iq.x;
+    yiq_signal.z = rotated_iq.y;
+
+    // RFスノーは細粒ノイズに、低頻度の白いインパルスを重ねます。
+    float snow_hash = crt_hash(vec3(src_px * vec2(1.7, 2.3), frame_count + 211.0));
+    float snow_impulse = max((snow_hash - 0.985) / 0.015, 0.0);
+    yiq_signal.x += rf_amount * rf_snow * ((snow_hash - 0.5) * 0.35 + snow_impulse * 1.2);
+    yiq_signal.y += rf_amount * rf_snow * snow_impulse * 0.20;
+    yiq_signal.z -= rf_amount * rf_snow * snow_impulse * 0.15;
+
     // ── YIQ→RGB復元 ─────────────────────────────────────────────────────────
     vec3 ntsc_rgb = CRT_YIQ_TO_RGB * yiq_signal;
 
@@ -174,8 +225,8 @@ void fragment() {
     // ghost_strength=0 のときはフェッチ自体を分岐で省きます（設計書§8.2の負荷逃げ道5）。
     if (ghost_strength > 0.0001) {
         vec2 ghost_uv_offset = vec2(ghost_offset_px * texel.x, 0.0);
-        ntsc_rgb += texture(source_texture, UV - ghost_uv_offset).rgb * ghost_strength;
-        ntsc_rgb += texture(source_texture, UV - ghost_uv_offset * 2.0).rgb * ghost_strength * 0.35;
+        ntsc_rgb += texture(source_texture, signal_uv - ghost_uv_offset).rgb * ghost_strength;
+        ntsc_rgb += texture(source_texture, signal_uv - ghost_uv_offset * 2.0).rgb * ghost_strength * 0.35;
         ntsc_rgb /= 1.0 + ghost_strength * 1.35;
     }
 
@@ -186,4 +237,5 @@ void fragment() {
     // どちらも「原画へ寄せる」方向で合成し、0/1の組で完全バイパス〜全量適用を表します。
     float ntsc_mix = clamp(signal_amount * (1.0 - rgb_bypass_mix), 0.0, 1.0);
     COLOR = vec4(mix(source_rgb, ntsc_rgb, ntsc_mix), 1.0);
+    }
 }

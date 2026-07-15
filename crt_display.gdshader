@@ -53,6 +53,18 @@ uniform bool interlace_enabled = false;
 uniform float interlace_dim : hint_range(0.0, 1.0) = 0.77;
 // 480i風フィールドの上下揺れ量[ソースpx]。
 uniform float interlace_bob_px : hint_range(0.0, 1.0) = 0.4;
+// 低解像度ソースの左右1texelを使う水平アンシャープ量です。
+uniform float horizontal_sharpness : hint_range(0.0, 1.5) = 0.15;
+// RとBを逆方向へずらす水平コンバージェンス誤差[最終表示px]です。
+uniform float convergence_x_px : hint_range(-4.0, 4.0) = 0.25;
+// RとBを逆方向へずらす垂直コンバージェンス誤差[最終表示px]です。
+uniform float convergence_y_px : hint_range(-4.0, 4.0) = 0.0;
+// 明るい蛍光体から周囲へ漏れる光（ハレーション）の強さです。
+uniform float halation_strength : hint_range(0.0, 1.0) = 0.12;
+// ハレーションの上下左右サンプル距離[最終表示px]です。
+uniform float halation_radius_px : hint_range(0.5, 8.0) = 1.5;
+// ハレーションを発生させる周辺サンプルの輝度閾値です。
+uniform float halation_threshold : hint_range(0.0, 1.0) = 0.65;
 
 // ─── 定数・補助関数 ─────────────────────────────────────────────────────────
 const vec3 CRT_STAGE2_LUMA = vec3(0.299, 0.587, 0.114);
@@ -175,8 +187,36 @@ void fragment() {
     }
 
     // ── 低解像度ソースサンプリング ────────────────────────────────────────────
+    // コンバージェンス誤差は出力ピクセル基準でR/Bを逆方向へずらします。
     vec3 source_rgb = texture(source_texture, sample_uv).rgb;
+    vec2 convergence_uv = vec2(convergence_x_px, convergence_y_px) / max(output_size, vec2(1.0));
+    if (abs(convergence_x_px) > 0.0001 || abs(convergence_y_px) > 0.0001) {
+        source_rgb.r = texture(source_texture, clamp(sample_uv + convergence_uv, vec2(0.0), vec2(1.0))).r;
+        source_rgb.b = texture(source_texture, clamp(sample_uv - convergence_uv, vec2(0.0), vec2(1.0))).b;
+    }
+
+    // ShaderGlass系CRTで一般的な前段シャープネスを、左右1texelの軽量アンシャープで近似します。
+    if (horizontal_sharpness > 0.0001) {
+        vec2 source_texel_x = vec2(1.0 / max(source_size.x, 1.0), 0.0);
+        vec3 horizontal_blur = (
+            texture(source_texture, clamp(sample_uv - source_texel_x, vec2(0.0), vec2(1.0))).rgb
+            + texture(source_texture, clamp(sample_uv + source_texel_x, vec2(0.0), vec2(1.0))).rgb) * 0.5;
+        source_rgb = clamp(source_rgb + (source_rgb - horizontal_blur) * horizontal_sharpness, vec3(0.0), vec3(1.0));
+    }
     vec3 linear_rgb = crt_to_linear(source_rgb);
+
+    // 明部周囲の4タップを先に採り、マスク適用後へ加算するハレーション光を作ります。
+    vec3 halation_linear = vec3(0.0);
+    if (halation_strength > 0.0001) {
+        vec2 halo_uv = vec2(halation_radius_px) / max(output_size, vec2(1.0));
+        vec3 halo_rgb = (
+            texture(source_texture, clamp(sample_uv + vec2(halo_uv.x, 0.0), vec2(0.0), vec2(1.0))).rgb
+            + texture(source_texture, clamp(sample_uv - vec2(halo_uv.x, 0.0), vec2(0.0), vec2(1.0))).rgb
+            + texture(source_texture, clamp(sample_uv + vec2(0.0, halo_uv.y), vec2(0.0), vec2(1.0))).rgb
+            + texture(source_texture, clamp(sample_uv - vec2(0.0, halo_uv.y), vec2(0.0), vec2(1.0))).rgb) * 0.25;
+        float halo_gate = smoothstep(min(halation_threshold, 0.9999), 1.0, dot(halo_rgb, CRT_STAGE2_LUMA));
+        halation_linear = crt_to_linear(halo_rgb) * halo_gate;
+    }
 
     // ── 走査線: ソースライン中心からの距離と輝度依存ビーム幅で減光量を作ります ─────
     float src_y = sample_uv.y * source_size.y;
@@ -199,6 +239,8 @@ void fragment() {
     linear_rgb *= crt_mask(screen_px);
 
     // ── 明度補償・外周減光・角丸・ベゼル ───────────────────────────────────────
+    // ハレーションは蛍光体マスクの暗部をまたいで漏れる光なので、マスク適用後に加算します。
+    linear_rgb += halation_linear * halation_strength;
     linear_rgb *= brightness_compensation;
     float edge_dist = min(min(source_uv.x, 1.0 - source_uv.x), min(source_uv.y, 1.0 - source_uv.y));
     float vignette = mix(1.0, smoothstep(0.0, 0.35, edge_dist), vignette_strength);
